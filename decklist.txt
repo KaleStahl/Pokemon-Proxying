@@ -1,2 +1,8 @@
-Pokémon: 28
-4 Eevee DS 69
+Pokémon: 0
+
+Trainer: 18
+8 N BWP 100
+8 Muscle Band XY 121
+2 Float Stone PLF 99
+
+Energy: 0
