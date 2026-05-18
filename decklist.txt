@@ -1,8 +1,7 @@
 Pokémon: 0
 
-Trainer: 18
-8 N BWP 100
-8 Muscle Band XY 121
-2 Float Stone PLF 99
+Trainer: 2
+2 Ancient Technical Machine [Rock] HL 85
 
-Energy: 0
+Energy: 3
+3 Holon Energy WP DS 106

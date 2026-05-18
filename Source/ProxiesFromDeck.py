@@ -1,12 +1,13 @@
 '''
 ProxiesFromDeck.py
 Kale Stahl
-Last Updated: 5/7/2026
+Last Updated: 5/17/2026
 '''
 
 import os
 import re
 import unicodedata
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from io import BytesIO
@@ -35,6 +36,9 @@ DECKLIST_FILE = "decklist.txt"
 GRID_BOOL = False  # Set to True to draw cutting grid lines on the PDF"
 
 image_cache = {}
+image_cache_lock = threading.Lock()
+image_session = requests.Session()
+CARD_QUERY_PAGE_SIZE = 100
 
 ### This can be changed if you want better resolution.
 TARGET_DPI = 600
@@ -50,29 +54,34 @@ CONTRAST = 1.08    # optional subtle contrast boost
 
 ### Get image from URL with caching and upscale to target print resolution
 def get_image(url):
-    if url not in image_cache:
-        r = requests.get(url)
-        img = Image.open(BytesIO(r.content)).convert("RGB")
+    with image_cache_lock:
+        cached = image_cache.get(url)
+    if cached is not None:
+        return cached
 
-        # Upscale to target print resolution
-        img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
+    r = image_session.get(url, timeout=20)
+    img = Image.open(BytesIO(r.content)).convert("RGB")
 
-        img = ImageEnhance.Color(img).enhance(SATURATION)
-        img = ImageEnhance.Brightness(img).enhance(BRIGHTNESS)
-        img = ImageEnhance.Contrast(img).enhance(CONTRAST)
-        img = adjust_gamma(img, 0.92)
+    # Upscale to target print resolution
+    img = img.resize((TARGET_W, TARGET_H), Image.LANCZOS)
 
-        img = img.filter(
-            ImageFilter.UnsharpMask(
-                radius=0.5,
-                percent=120,
-                threshold=2
-            )
+    img = ImageEnhance.Color(img).enhance(SATURATION)
+    img = ImageEnhance.Brightness(img).enhance(BRIGHTNESS)
+    img = ImageEnhance.Contrast(img).enhance(CONTRAST)
+    img = adjust_gamma(img, 0.92)
+
+    img = img.filter(
+        ImageFilter.UnsharpMask(
+            radius=0.5,
+            percent=120,
+            threshold=2
         )
+    )
 
+    with image_cache_lock:
         image_cache[url] = img
 
-    return image_cache[url]
+    return img
 
 ### Adjusts gamma
 def adjust_gamma(img, gamma=0.92):
@@ -112,10 +121,22 @@ def boost_blues_greens(img, sat_boost=1.25):
 
 ### Parse a line of the decklist - expects format like "4 Pikachu BWP 25"
 def parse_line(line):
-    match = re.match(r"(\d+)\s+(.+?)\s+([A-Z0-9\-]+)\s+(\d+)", line)
-    if not match:
+    line = line.strip()
+
+    if not line:
         return None
-    return int(match.group(1)), match.group(2), match.group(3), match.group(4)
+
+    m = re.match(r"^(\d+)\s+(.+?)\s+([A-Z0-9]+)\s+([A-Z0-9]+)$", line)
+
+    if not m:
+        return None
+
+    count = int(m.group(1))
+    name = m.group(2).strip()
+    set_code = m.group(3).strip()
+    number = m.group(4).strip()
+
+    return count, name, set_code, number
 
 ### Normalize card name for API queries - convert stars to symbols and energy letters to {L}, {W}, etc. to maximize chances of matching weird card names in the API
 def normalize_name_for_api(name):
@@ -126,7 +147,9 @@ def normalize_name_for_api(name):
         letters = match.group(1)
         return " ".join(f"{{{c}}}" for c in letters)
 
-    name = re.sub(r"\b([LWMFPDC]+)\b$", replace_energy, name)
+    # ONLY convert trailing energy letters for Unit/Blend Energy cards
+    if re.search(r"\b(unit|blend)\s+energy\b", name, re.IGNORECASE):
+        name = re.sub(r"\b([LWMFPDC]+)\b$", replace_energy, name)
 
     name = re.sub(r"\s+", " ", name).strip()
     return name
@@ -135,19 +158,23 @@ def normalize_name_for_api(name):
 def norm(text):
     text = text.lower()
 
-    # Normalize star both ways for matching
     text = text.replace("★", "star")
     text = text.replace("◇", "prism star")
 
-    # Normalize unicode accents but KEEP symbols
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
+
+    # strip punctuation
+    text = re.sub(r"[^a-z0-9\s]", "", text)
+
+    text = re.sub(r"\s+", " ", text).strip()
 
     return text
 
 ### Build a unique set of cards from the decklist, keyed by normalized name + number + set code to minimize API calls
 def build_unique(deck_lines):
     unique = {}
+    counts = {}
 
     for line in deck_lines:
         parsed = parse_line(line)
@@ -163,8 +190,11 @@ def build_unique(deck_lines):
                 "number": number,
                 "set_code": set_code.upper()
             }
+            counts[key] = 0
 
-    return unique
+        counts[key] += count
+
+    return unique, counts
 
 ### Build possible number variants based on set code and original number, to maximize chances of matching weird promo numbering schemes
 ### (Limitless/TGCLive uses different numbering sometimes so this hopefully catches those)
@@ -211,8 +241,68 @@ def build_possible_numbers(number, set_code):
     # General fallback for weird promos
     if n_int is not None:
         nums.add(str(n_int))
+        cleaned_set_code = re.sub(r"[^A-Z]", "", set_code.upper())
+        if cleaned_set_code:
+            nums.update({
+                f"{cleaned_set_code}{n_int}",
+                f"{cleaned_set_code}{n_int:02d}"
+            })
+
 
     return nums
+
+### Strip bracketed suffixes from a card name for query fallback handling
+### Example: "Ancient Technical Machine [Rock]" -> "Ancient Technical Machine"
+def strip_bracket_suffix(name):
+    return re.sub(r"\s*\[[^\]]+\]\s*$", "", name).strip()
+
+### Build fallback name variants for cards that may be listed in alternate spellings
+### or with special gender/symbol forms that the API requires.
+def build_name_variants(api_name):
+    variants = [api_name]
+    bracket_safe = re.sub(r"[\[\]]", "", api_name).strip()
+    if bracket_safe != api_name:
+        variants.append(bracket_safe)
+
+    stripped_name = strip_bracket_suffix(api_name)
+    if stripped_name and stripped_name not in variants:
+        variants.append(stripped_name)
+
+    if re.search(r"\bNidoran\s*(?:F|Female)\b", api_name, flags=re.IGNORECASE):
+        variants.append(re.sub(r"\bNidoran\s*(?:F|Female)\b", "Nidoran♀", api_name, flags=re.IGNORECASE))
+    if re.search(r"\bNidoran\s*(?:M|Male)\b", api_name, flags=re.IGNORECASE):
+        variants.append(re.sub(r"\bNidoran\s*(?:M|Male)\b", "Nidoran♂", api_name, flags=re.IGNORECASE))
+
+    seen = set()
+    ordered = []
+    for v in variants:
+        v = v.strip()
+        if v and v not in seen:
+            seen.add(v)
+            ordered.append(v)
+
+    return ordered
+
+### Build tokenized name queries to allow matching alternate spellings
+### like "Mr Mime", "Type Null", or "Farfetchd" when exact phrase search fails.
+def build_tokenized_queries(name):
+    tokens = re.findall(r"[A-Za-z0-9]+", name)
+    if not tokens:
+        return []
+
+    queries = [" ".join(f"name:{token}" for token in tokens)]
+
+    # Allow an apostrophe-style fallback for names such as Farfetch'd where the decklist
+    # may omit the apostrophe.
+    for idx, token in enumerate(tokens):
+        if len(token) > 2 and token.lower().endswith("d") and "'" not in token:
+            stripped = token[:-1]
+            alt_tokens = tokens[:idx] + [stripped, token[-1]] + tokens[idx+1:]
+            alt_query = " ".join(f"name:{t}" for t in alt_tokens)
+            if alt_query not in queries:
+                queries.append(alt_query)
+
+    return queries
 
 ### Fetch candidate cards from API for each unique item in the decklist, using multiple query strategies to maximize chances
 ### of finding a match. There is 10000% a better way to do this, but this is what I first came up with and it seems to not break always.
@@ -225,32 +315,75 @@ def fetch_candidates(unique_items, max_workers=12):
         set_code = item["set_code"]
 
         api_name = normalize_name_for_api(name)
-        possible_numbers = build_possible_numbers(number, set_code)
+        possible_numbers = sorted(build_possible_numbers(number, set_code), key=lambda v: (len(v), v))
+
+        def quote_value(value):
+            return value.replace('\\', '\\\\').replace('"', '\\"')
+
+        quoted_name = quote_value(api_name)
+        bracket_safe = re.sub(r"[\[\]]", "", api_name)
+        bracket_safe = re.sub(r"\s+", " ", bracket_safe).strip()
+        quoted_bracket_safe = quote_value(bracket_safe)
 
         queries = []
 
-        # Try all number variants
+        name_variants = build_name_variants(api_name)
+
+        # Try exact name + number + set first, then broaden only if needed.
         for num in possible_numbers:
-            queries.extend([
-                f'name:"{api_name}" number:{num} set.ptcgoCode:{set_code}',
-                f'name:"{api_name}" number:{num} set.id:{set_code.lower()}',
-                f'name:"{api_name}" number:{num}'
-            ])
+            for variant in name_variants:
+                quoted_variant = quote_value(variant)
+                queries.extend([
+                    f'name:"{quoted_variant}" number:{num} set.ptcgoCode:{set_code}',
+                    f'name:"{quoted_variant}" number:{num} set.id:{set_code.lower()}',
+                    f'name:"{quoted_variant}" number:{num}'
+                ])
+
+                for token_query in build_tokenized_queries(variant):
+                    queries.extend([
+                        f'{token_query} number:{num} set.ptcgoCode:{set_code}',
+                        f'{token_query} number:{num} set.id:{set_code.lower()}',
+                        f'{token_query} number:{num}'
+                    ])
 
         # Fallbacks without number
-        queries.extend([
-            f'name:"{api_name}" set.id:{set_code.lower()}',
-            f'name:"{api_name}" set.ptcgoCode:{set_code}',
-            f'name:"{api_name}"'
-        ])
+        for variant in name_variants:
+            quoted_variant = quote_value(variant)
+            queries.extend([
+                f'name:"{quoted_variant}" set.id:{set_code.lower()}',
+                f'name:"{quoted_variant}" set.ptcgoCode:{set_code}',
+                f'name:"{quoted_variant}"'
+            ])
+
+            for token_query in build_tokenized_queries(variant):
+                queries.extend([
+                    f'{token_query} set.id:{set_code.lower()}',
+                    f'{token_query} set.ptcgoCode:{set_code}',
+                    f'{token_query}'
+                ])
+
+        seen_queries = set()
+        query_cache = {}
+
+        def run_query(q):
+            if q in query_cache:
+                return query_cache[q]
+            if q in seen_queries:
+                return []
+            seen_queries.add(q)
+            try:
+                results_q = Card.where(q=q, pageSize=CARD_QUERY_PAGE_SIZE)
+            except:
+                results_q = []
+            query_cache[q] = results_q
+            return results_q
 
         seen_ids = set()
         cards = []
 
         for q in queries:
-            try:
-                results_q = Card.where(q=q)
-            except:
+            results_q = run_query(q)
+            if not results_q:
                 continue
 
             for c in results_q:
@@ -258,19 +391,28 @@ def fetch_candidates(unique_items, max_workers=12):
                     seen_ids.add(c.id)
                     cards.append(c)
 
-            if any(str(c.number).upper() in possible_numbers for c in cards):
+            if any(
+                str(c.number).upper() in possible_numbers and
+                hasattr(c, "set") and
+                c.set and
+                (
+                    c.set.ptcgoCode == set_code or
+                    c.set.id.lower() == set_code.lower()
+                )
+                for c in cards
+            ):
                 break
-            if "unit energy" in norm(name) or "blend energy" in norm(name):
-                try:
-                    base_name = "Unit Energy" if "unit energy" in norm(name) else "Blend Energy"
-                    loose = Card.where(q=f'name:"{base_name}"')
 
-                    for c in loose:
-                        if c.id not in seen_ids:
-                            seen_ids.add(c.id)
-                            cards.append(c)
-                except:
-                    pass
+        if ("unit energy" in norm(name) or "blend energy" in norm(name)) and not cards:
+            try:
+                base_name = "Unit Energy" if "unit energy" in norm(name) else "Blend Energy"
+                loose = run_query(f'name:"{base_name}"')
+                for c in loose:
+                    if c.id not in seen_ids:
+                        seen_ids.add(c.id)
+                        cards.append(c)
+            except:
+                pass
 
         return (norm(name), number, set_code), cards
 
@@ -291,40 +433,57 @@ def extract_energy_letters(name):
 def resolve(cards, name, number, set_code):
     if not cards:
         return None
-    
-    target_letters = sorted(list(number)) if "energy" in norm(name) else None
+
+    target_name = norm(name)
+    target_number = str(number).upper()
+
+    best = None
+    best_score = -999
 
     for c in cards:
-        if "energy" in norm(name):
-            card_letters = extract_energy_letters(c.name)
-            if card_letters == target_letters:
-                return c
+        score = 0
 
-    possible_numbers = build_possible_numbers(number, set_code)
+        card_name = norm(c.name)
+        card_number = str(c.number).upper()
 
-    for c in cards:
+        # exact name
+        if card_name == target_name:
+            score += 100
+
+        # partial name
+        elif target_name in card_name:
+            score += 50
+
+        # exact number
+        if card_number == target_number:
+            score += 100
+        elif target_number and card_number.endswith(target_number):
+            score += 50
+
+        # set similarity
         if hasattr(c, "set") and c.set:
-            if (
-                str(c.number).upper() in possible_numbers and
-                (c.set.id.lower() == set_code.lower() or
-                 (set_code == "WP" and c.set.id.lower() == "basep"))
-            ):
-                return c
+            sid = c.set.id.lower()
 
-    for c in cards:
-        if str(c.number).upper() in possible_numbers:
-            return c
+            if set_code.lower() in sid:
+                score += 50
 
-    for c in cards:
-        if norm(name) in norm(c.name):
-            if str(c.number).upper() in possible_numbers:
-                return c
+            if c.set.ptcgoCode:
+                if c.set.ptcgoCode.upper() == set_code.upper():
+                    score += 100
 
-    return None
+        # prefer cards with images
+        if hasattr(c, "images"):
+            score += 5
+
+        if score > best_score:
+            best_score = score
+            best = c
+
+    return best
 
 ### Build the list of image URLs based on the decklist
 def build_image_list(deck_lines):
-    unique = build_unique(deck_lines)
+    unique, counts = build_unique(deck_lines)
     candidate_map = fetch_candidates(unique)
 
     images = []
@@ -339,15 +498,7 @@ def build_image_list(deck_lines):
             continue
 
         url = card.images.large
-
-        for line in deck_lines:
-            parsed = parse_line(line)
-            if not parsed:
-                continue
-
-            c, n, s, num = parsed
-            if norm(n) == name and num == number and s.upper() == set_code:
-                images.extend([url] * c)
+        images.extend([url] * counts[(name, number, set_code)])
 
     return images
 
@@ -368,7 +519,19 @@ def draw_grid(c, x0, y0):
     c.setDash()
 
 ### Generates a PDF with the card images laid out in a grid, ready for printing and cutting
+def prefetch_images(image_urls, max_workers=12):
+    unique_urls = list(dict.fromkeys(image_urls))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(get_image, url) for url in unique_urls]
+        for f in as_completed(futures):
+            try:
+                f.result()
+            except:
+                pass
+
+
 def create_pdf(image_urls, filename="proxies.pdf"):
+    prefetch_images(image_urls)
     c = canvas.Canvas(
         filename,
         pagesize=(COLS * CARD_W, ROWS * CARD_H),

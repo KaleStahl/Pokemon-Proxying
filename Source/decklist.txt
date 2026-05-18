@@ -1,0 +1,7 @@
+Pokémon: 0
+
+Trainer: 2
+2 Ancient Technical Machine [Rock] HL 85
+
+Energy: 3
+3 Holon Energy WP DS 106
