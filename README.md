@@ -14,9 +14,11 @@ This is a script I made which uses the [Pokemon TCG API](https://pokemontcg.io/)
 - The API doesn't always have the highest quality scans, especially for older cards. As such, not all images can be properly scaled to the target DPI.
 
 ## History
+Version 0.1.2 (2026- 5-17) Sped up runtime and fixed querying so cards are almost always found. Expected to be the final terminal application release. Next release should have a functional GUI.
+
 Version 0.1.1 (2026- 5-16) Added ability to change image data for printing.
 
-Version 0.1.1 (2026-5-7) Initial Release with barebones functionality.
+Version 0.1.0 (2026-5-7) Initial Release with barebones functionality.
 
 ## License
 The MIT License (MIT)
