@@ -1,7 +1,72 @@
-Pokémon: 0
+Pokémon: 59
+4 Baltoy GE 60
+4 Claydol GE 15
+4 Uxie LA 43
+1 Uxie LV.X LA 146
+4 Crobat G PL 47
+3 Unown [G] GE 57
+1 Unown [Q] MD 49
+3 Dratini DS 66
+1 Dragonair DS 42
+3 Dragonite DS 3
+3 Sableye SF 48
+2 Lucario DP 6
+1 Lucario GL RR 8
+2 Mewtwo MD 9
+2 Mewtwo LV.X LA 144
+2 Electivire DP 3
+2 Sceptile GE 8
+2 Azelf LA 19
+1 Nidoran ♀ RR 71
+1 Nidoqueen RR 30
+1 Kirlia SW 53
+1 Gardevoir SW 7
+1 Gallade SW 6
+1 Grotle MD 37
+1 Jirachi ex CG 94
+1 Dusknoir DP 2
+1 Toxicroak G DPP 41
+1 Rayquaza Star DX 107
+1 Chatot MD 55
+1 Jolteon Star PK 101
+1 Honchkrow G PL 77
+1 Luxray GL RR 9
+1 Gardevoir LV.X SW 131
 
-Trainer: 2
-2 Ancient Technical Machine [Rock] HL 85
+Trainer: 129
+17 Roseanne's Research SW 125
+16 Celio's Network CG 73
+8 Steven's Advice PK 83
+3 Copycat DF 73
+2 Castaway CG 72
+2 Holon Mentor DF 75
+2 Holon Scientist DS 97
+2 Mr. Briney's Compassion P2 8
+1 Holon Lass DS 92
+1 Holon Researcher DS 95
+1 Cynthia's Feelings LA 131
+1 Team Galactic's Wager MT 115
+1 Aaron's Collection RR 88
+19 Rare Candy GE 102
+8 Holon Transceiver DS 98
+8 Warp Point MD 88
+6 Team Galactic's Invention G-105 Poké Turn PL 118
+5 Windstorm CG 85
+3 Rare Candy HP 90
+3 Rare Candy P5 7
+2 Premier Ball GE 101
+1 Luxury Ball SF 86
+4 Cessation Crystal CG 74
+3 Team Galactic's Invention G-101 Energy Gain PL 116
+1 Memory Berry PL 110
+4 Cursed Stone LM 72
+2 Holon Ruins DS 96
+2 Moonlight Stadium GE 100
+1 Broken Time-Space PL 104
 
-Energy: 3
-3 Holon Energy WP DS 106
+Energy: 36
+16 Call Energy MD 92
+10 Scramble Energy DF 89
+7 Double Rainbow Energy CG 88
+2 Multi Energy MT 118
+1 Darkness Energy MT 119
