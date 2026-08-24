@@ -1,0 +1,73 @@
+ProxyPrintGUI 
+
+FEATURES:
+Required Features:
+- Automatically pull card images from API
+- Create Decklist by adding cards individually or directly import all from decklist
+- Card spacing and orientation options
+- Color Correction
+- Page preview in GUI
+Optional Features
+- Print from application
+- Extend edges on old scans
+- Options to manually insert card images
+- Card backs and alignment
+
+PROGRAM STRUCTURE:
+GUI Class:
+    Stores GUI object
+    MEMBERS:
+        Main MenuStrip
+            - File
+                - Save PDF
+                - Save PDF As
+                - Exit
+            - Help
+                - GitHub
+                - README
+        PDFViewer
+            Panel displaying a preview of a page of the pdf
+            - Forward/Back navigation buttons
+            - Page number select
+        PDFOptions
+            Panel displaying the options to toggle when generating the pdf
+            - Button to generate the pdf with given parameters
+            - Entry boxes with horizontal/verticle space between cards
+            - Toggle for portrait/landscape orientation
+            Advanced Options
+                New popup frame for image and more options
+                - Print Proxy Identifier toggle
+                    - Custom Identifier text entry
+                - Entry for custom card size
+                - NumericUpDownBox for number of cards per page (calculates this with spacing to see if they fit)
+                - Color Correction 
+                    - Saturation, Brightness, Contrast
+                    - RGB tuning
+                - Print Card Backs
+                    - Select Card Back File
+                    - Custom Card Back Identifier text
+        DeckListImporter
+            Panel allowing the user to import a decklist or manually add cards
+        
+PDFGenerator Class:
+    Generates the pdf using reportlab
+    METHODS:
+    -> GeneratePDF
+        Takes in decklist and creates a pdf with images of all cards in the decklist.
+        -> GetPageOptions
+            Reads options from the GUI and sets the settings in reportlab accordingly.
+            - Checks if page is setup in Landscape/Portrait mode
+            - Checks card spacing and sizing
+        -> AddImages
+            Reads the card images from ImageList and adds it to the pdf following the appropriate spacing.
+            - Adds any color correction or edge extension
+    -> ReadDecklist
+        Reads the decklist and queries the API for each card.
+        -> GetImage
+            Gets the image for a certain card by matching the set, collection number, and name. 
+            - Caches the image for future use
+            - Throws an error if no card is found
+        -> AddCard
+            Adds the card image in the required quantity to the ImageList item for GeneratePDF to pull from.
+        
+
