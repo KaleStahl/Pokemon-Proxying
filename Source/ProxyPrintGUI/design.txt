@@ -34,6 +34,7 @@ GUI Class:
             - Button to generate the pdf with given parameters
             - Entry boxes with horizontal/verticle space between cards
             - Toggle for portrait/landscape orientation
+            - Dropdown for paper size
             Advanced Options
                 New popup frame for image and more options
                 - Print Proxy Identifier toggle
@@ -48,7 +49,18 @@ GUI Class:
                     - Custom Card Back Identifier text
         DeckListImporter
             Panel allowing the user to import a decklist or manually add cards
-        
+            - Import cards from decklist button 
+                -> Popup frame for which to copy and paste deck list
+            - Import Cards manually
+                - Search bar for name
+                - Dropdown box for set
+                - Panel which shows the resulting images
+                    - Clicking an image adds the card to the decklist
+            - Panel showing current list of added cards 
+                - Combines imported and manually added cards
+                - Double clicking deletes a card               
+        StartProcess
+            Button which runs the GeneratePDF method using the decklist and options provided.
 PDFGenerator Class:
     Generates the pdf using reportlab
     METHODS:
