@@ -22,6 +22,8 @@ GUI Class:
                 - Save PDF
                 - Save PDF As
                 - Exit
+            - API Keys
+                - Add API Key
             - Help
                 - GitHub
                 - README

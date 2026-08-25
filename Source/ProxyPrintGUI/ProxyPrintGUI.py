@@ -9,4 +9,4 @@ import UserInterface
 
 ux = tk.Tk()
 app = UserInterface.UserInterface(ux)
-app.uxInitialize(ux)
+app.uxInitialize()
