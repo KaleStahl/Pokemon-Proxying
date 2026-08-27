@@ -51,7 +51,40 @@ class UserInterface:
     def onClose(self, window):
         window.destroy()
         return None
-    
+
+    def uxSetApiKey(self):
+        """
+        Event handler for Set API Key menu bar item.
+
+        Returns
+        -------
+        None.
+
+        """
+        return None
+
+    def uxSavePDF(self):
+        """
+        Event handler for Save PDF menu bar item.
+
+        Returns
+        -------
+        None.
+
+        """
+        return None
+
+    def uxSavePDFAs(self):    
+        """
+        Event handler for Save PDF As menu bar item.
+
+        Returns
+        -------
+        None.
+
+        """
+        return None
+
     ### GUI INITIALIZATION FUNCTIONS ###
     def uxInitialize(self):
         """
@@ -85,6 +118,9 @@ class UserInterface:
         self._root.columnconfigure(0, weight = 1, minsize = self._root.winfo_width()/2)
         self._root.columnconfigure(1, weight = 1, minsize = self._root.winfo_width()/2)
         self._root.rowconfigure(0, weight = 1, minsize = self._root.winfo_height())
+
+  
+
         return None
 
     def uxFileMenu(self):
@@ -102,10 +138,17 @@ class UserInterface:
 
         # Create file menu bar
         self._fileMenu = tk.Menu(self._menuBar, tearoff=0)
+        self._fileMenu.add_command(label="Save PDF", command=self.uxSavePDF)
+        self._fileMenu.add_command(label="Save PDF As", command=self.uxSavePDFAs)
         self._fileMenu.add_separator()
-        self._fileMenu.add_command(label="Exit", command=self._root.destroy)
+        self._fileMenu.add_command(label="Exit", command=lambda: self.onClose(self._root))
         self._menuBar.add_cascade(label="File", menu=self._fileMenu)
 
+        # Initializes API Keysmenu bar
+        self._helpMenu = tk.Menu(self._menuBar, tearoff=0)
+        self._helpMenu.add_command(label="Set API Key", command=self.uxSetApiKey)
+        self._menuBar.add_cascade(label="API Keys", menu=self._helpMenu)
+        
         # Initializes help menu bar
         self._helpMenu = tk.Menu(self._menuBar, tearoff=0)
         self._helpMenu.add_command(label="README", command=self.uxReadMe)
