@@ -32,6 +32,7 @@ class PDFOptions:
                     cardBacks = False,
                     cardBackText = "",
                     proxyText = "",
+                    TargetDPI = 600
                 ):
             '''
             Initialize the PDFOptions object with its options.
@@ -76,6 +77,8 @@ class PDFOptions:
                 The text to be printed on the backs of the cards. The default is "".
             proxyText : str, optional
                 The text to be printed on the proxies. The default is "".
+            TargetDPI : int, optional
+                The target DPI for the PDF. The default is 600.
             '''
             self._output = output_file
             self._cardsPerPage = cards_per_page
@@ -95,3 +98,4 @@ class PDFOptions:
             self._vertical_margin = vertical_margin
             self._horizontal_spacing = horizontal_spacing
             self._vertical_spacing = vertical_spacing
+            self._targetDPI = TargetDPI
